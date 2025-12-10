@@ -57,8 +57,11 @@ class OpenAIService {
                 'header'  => "Content-Type: application/json\r\n" .
                              "Authorization: Bearer " . $this->apiKey . "\r\n",
                 'content' => json_encode($payload),
-                'timeout' => 20, // 設定 20 秒逾時
-                'ignore_errors' => true // 即使 4xx/5xx 也要讀取回應內容
+                'timeout' => 30, // 總等待時間
+                'ignore_errors' => true,
+                // 🚨 新增：強制每一次都是新連線，解決 Socket 衝突
+                'protocol_version' => 1.1, 
+                'max_redirects' => 0,
             ],
             'ssl' => [
                 'verify_peer' => false,

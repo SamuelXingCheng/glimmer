@@ -13,6 +13,12 @@ error_reporting(E_ALL);
 error_log("------------------------------------------------");
 error_log("【Webhook】程式開始執行...");
 
+// 🚨 緊急處理：強制釋放 Session 鎖定 (如果主機有啟用 Session)
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+    error_log("【Session Fix】已強制關閉 Session 寫入。");
+}
+
 require_once 'config.php';
 require_once 'src/Database.php';
 require_once 'src/OpenAIService.php'; 
@@ -135,7 +141,16 @@ function replyText($replyToken, $text) {
         "Content-Type: application/json", 
         "Authorization: Bearer " . LINE_CHANNEL_ACCESS_TOKEN
     ]);
-    curl_exec($ch);
+
+    // 🚨 修正：確保 LINE 回覆的 cURL 連線是全新且快速的
+    curl_setopt($ch, CURLOPT_FORBID_REUSE, true);
+    curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5); // 快速連線
+
+    $res = curl_exec($ch);
+    if(curl_errno($ch)){
+        error_log("【LINE Reply Error】" . curl_error($ch));
+    }
     curl_close($ch);
 }
 
