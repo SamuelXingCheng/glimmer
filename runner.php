@@ -38,6 +38,16 @@ try {
     $userData = getUserDataForRunner($db, $userId);
     $personaPrompt = $userData ? $userData['persona_prompt'] : null;
 
+    // 🚨 關鍵修改：組裝最終 System Prompt
+    $finalSystemPrompt = $personaPrompt;
+
+    // 如果有長時記憶，將其放在最前面，提供給 AI 參考
+    if (!empty($userData['ltm_summary'])) {
+        $finalSystemPrompt .= "\n\n【用戶長時記憶摘要】：\n";
+        $finalSystemPrompt .= $userData['ltm_summary'];
+        $finalSystemPrompt .= "\n";
+    }
+
     // 4. 呼叫 OpenAI (這裡會花 3~5 秒，但不會卡住 Webhook)
     $aiReply = $aiService->generateReply($userMsg, $history, $personaPrompt);
 
@@ -97,8 +107,20 @@ function getChatHistoryForRunner($pdo, $userId, $limit = 10) {
 }
 
 function getUserDataForRunner($pdo, $userId) {
+    // 獲取人設 Prompt
     $stmt = $pdo->prepare("SELECT persona_prompt FROM users WHERE line_user_id = ?");
     $stmt->execute([$userId]);
-    return $stmt->fetch();
+    $data = $stmt->fetch();
+    
+    if (!$data) return null;
+
+    // 🚨 新增：撈取最新的長時記憶摘要
+    $ltm_stmt = $pdo->prepare("SELECT summary_text FROM user_ltm_summaries WHERE line_user_id = ? ORDER BY created_at DESC LIMIT 1");
+    $ltm_stmt->execute([$userId]);
+    $ltm_summary = $ltm_stmt->fetchColumn();
+
+    $data['ltm_summary'] = $ltm_summary ?: ''; // 如果沒有摘要，則為空字串
+
+    return $data;
 }
 ?>

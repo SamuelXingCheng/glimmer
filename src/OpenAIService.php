@@ -107,5 +107,53 @@ class OpenAIService {
             return "AI 思考中斷";
         }
     }
+
+    /**
+     * 新增：專門用於生成長時記憶摘要的函式
+     */
+    public function generateSummary($prompt) {
+        if (empty($this->apiKey)) return null;
+
+        $url = "https://api.openai.com/v1/chat/completions";
+
+        $messages = [
+            // 讓 AI 知道它的任務是精簡地總結長篇內容
+            ['role' => 'system', 'content' => "You are an expert summarizer. Your task is to extract core user information, interests, and relationship dynamics from the given conversation and output a concise, single-paragraph Chinese summary. You must strictly follow all length and content instructions provided in the user prompt."],
+            
+            // 傳入需要摘要的內容
+            ['role' => 'user', 'content' => $prompt]
+        ];
+
+        $payload = [
+            'model' => $this->model,
+            'messages' => $messages,
+            'max_tokens' => 800, // 摘要需要較長的輸出空間
+            'temperature' => 0.2, // 確保摘要內容是事實且準確的（低溫度）
+        ];
+
+        // 🚨 沿用 file_get_contents 連線邏輯
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Content-Type: application/json",
+            "Authorization: Bearer " . $this->apiKey
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 摘要可能需要更長的時間
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $data = json_decode($response, true);
+        
+        // 錯誤處理
+        if (isset($data['error'])) {
+            throw new Exception("OpenAI Summarize Error: " . ($data['error']['message'] ?? '未知錯誤'));
+        }
+
+        return $data['choices'][0]['message']['content'] ?? null;
+    }
 }
 ?>
