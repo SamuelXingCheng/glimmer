@@ -1,31 +1,51 @@
 <?php
 // glimmer/webhook.php
+
+// 1. 設定腳本執行時間
+set_time_limit(60); 
+
+// 2. 開啟詳細錯誤紀錄
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 error_reporting(E_ALL);
 
+// 【Debug Start】
+error_log("------------------------------------------------");
+error_log("【Webhook】程式開始執行...");
+
 require_once 'config.php';
 require_once 'src/Database.php';
-require_once 'src/GeminiService.php';
+require_once 'src/OpenAIService.php'; // 確認這裡是 OpenAI
 
-// 1. 接收 LINE Webhook 資料
 $content = file_get_contents('php://input');
 $events = json_decode($content, true);
 
+// 握手測試
 if (empty($events['events'])) {
+    error_log("【Webhook】收到空事件 (或是 Verify 請求)");
     echo "OK";
     exit;
 }
 
-$db = Database::getInstance()->getConnection();
-$gemini = new GeminiService();
+try {
+    $db = Database::getInstance()->getConnection();
+    error_log("【Webhook】資料庫連線成功");
+} catch (Exception $e) {
+    error_log("【Webhook Fatal】資料庫連線失敗: " . $e->getMessage());
+    exit;
+}
+
+$aiService = new OpenAIService();
 
 foreach ($events['events'] as $event) {
+    
     if ($event['type'] == 'message' && $event['message']['type'] == 'text') {
         
         $userId = $event['source']['userId'];
         $userMsg = trim($event['message']['text']);
         $replyToken = $event['replyToken'];
+
+        error_log("【Webhook】收到訊息: $userMsg (User: $userId)");
 
         // ==========================================
         // 指令區
@@ -33,57 +53,70 @@ foreach ($events['events'] as $event) {
 
         // 指令 1: 設定人設
         if (mb_strpos($userMsg, '設定人設：') === 0) {
-            $newPrompt = trim(mb_substr($userMsg, 5)); // 去掉前5個字
-            
+            $newPrompt = trim(mb_substr($userMsg, 5));
             if (mb_strlen($newPrompt) < 2) {
-                replyText($replyToken, "人設描述太短囉，請多告訴我一點細節。");
+                replyText($replyToken, "人設描述太短囉。");
                 continue;
             }
-
             updateUserPersona($db, $userId, $newPrompt);
-            clearHistory($db, $userId); // 設定新人設後，清除舊記憶
-            
-            replyText($replyToken, "收到！人設已更新，記憶已重置。\n現在試著跟我說話看看？");
+            clearHistory($db, $userId); 
+            replyText($replyToken, "收到！人設已更新，記憶已重置。");
             continue;
         }
 
-        // 指令 2: 查看目前人設
+        // 指令 2: 查看人設
         if ($userMsg === '查看人設') {
-            $currentPrompt = getUserPersona($db, $userId);
-            $reply = $currentPrompt ? "📜 目前的人設指令：\n\n" . $currentPrompt : "📜 目前使用預設人設（溫暖的微光角落）。";
-            replyText($replyToken, $reply);
+            $p = getUserPersona($db, $userId);
+            replyText($replyToken, $p ? "📜 目前人設：\n$p" : "📜 目前使用預設人設。");
             continue;
         }
 
         // 指令 3: 清除記憶
         if ($userMsg === '清除記憶' || $userMsg === '重置') {
             clearHistory($db, $userId);
-            replyText($replyToken, "🧹 記憶已清除，我們可以重新開始了。");
+            replyText($replyToken, "🧹 記憶已清除。");
             continue;
         }
         
         // ==========================================
         // 對話區
         // ==========================================
-        
-        $personaPrompt = getUserPersona($db, $userId);
-        $history = getChatHistory($db, $userId, 10);
-        
-        // 呼叫 Gemini AI
-        $aiReply = $gemini->generateReply($userMsg, $history, $personaPrompt);
+        try {
+            $personaPrompt = getUserPersona($db, $userId);
+            $history = getChatHistory($userId, 10);
+            
+            error_log("【Webhook】準備呼叫 OpenAI Service...");
+            
+            // 呼叫 AI
+            $aiReply = $aiService->generateReply($userMsg, $history, $personaPrompt);
 
-        saveChat($db, $userId, 'user', $userMsg);
-        
-        if ($aiReply) {
-            saveChat($db, $userId, 'model', $aiReply);
-            replyText($replyToken, $aiReply);
+            if ($aiReply) {
+                error_log("【Webhook】AI 回覆內容: " . mb_substr($aiReply, 0, 20) . "...");
+                
+                // 存檔
+                saveChat($db, $userId, 'user', $userMsg);
+                saveChat($db, $userId, 'model', $aiReply);
+                
+                // 回覆 LINE
+                replyText($replyToken, $aiReply);
+                error_log("【Webhook】已發送回覆給 LINE");
+            } else {
+                error_log("【Webhook Error】AI 回傳內容為空！");
+                replyText($replyToken, "AI 暫時無法回應 (Empty Response)");
+            }
+
+        } catch (Exception $e) {
+            error_log("【Webhook Exception】處理過程發生錯誤: " . $e->getMessage());
+            replyText($replyToken, "系統發生錯誤，請檢查 Log");
         }
     }
 }
 
-// ----------------------------------------------------
-// 輔助函式庫
-// ----------------------------------------------------
+echo "OK";
+
+// ====================================================
+// 輔助函式庫 (之前消失的就是這些，這次補齊了)
+// ====================================================
 
 function replyText($replyToken, $text) {
     $url = "https://api.line.me/v2/bot/message/reply";
@@ -99,7 +132,10 @@ function replyText($replyToken, $text) {
         "Content-Type: application/json",
         "Authorization: Bearer " . LINE_CHANNEL_ACCESS_TOKEN
     ]);
-    curl_exec($ch);
+    $res = curl_exec($ch);
+    if(curl_errno($ch)){
+         error_log("【LINE Reply Error】" . curl_error($ch));
+    }
     curl_close($ch);
 }
 
@@ -127,25 +163,22 @@ function clearHistory($pdo, $userId) {
     $stmt->execute([$userId]);
 }
 
-function getChatHistory($pdo, $userId, $limit) {
-    $stmt = $pdo->prepare("
-        SELECT role, message FROM (
-            SELECT role, message, created_at 
-            FROM chat_logs 
-            WHERE line_user_id = ? 
-            ORDER BY id DESC LIMIT ?
-        ) sub ORDER BY created_at ASC
-    ");
-    $stmt->execute([$userId, $limit]);
-    $rows = $stmt->fetchAll();
+function getChatHistory($userId, $limit = 10) {
+    $db = Database::getInstance();
+    $pdo = $db->getConnection(); 
     
-    $formatted = [];
-    foreach ($rows as $row) {
-        $formatted[] = [
-            'role' => $row['role'],
-            'parts' => [['text' => $row['message']]]
-        ];
-    }
-    return $formatted;
+    $sql = "SELECT * FROM (
+                SELECT * FROM chat_logs 
+                WHERE line_user_id = :user_id 
+                ORDER BY created_at DESC 
+                LIMIT :limit
+            ) sub ORDER BY created_at ASC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':user_id', $userId);
+    $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
 }
 ?>
