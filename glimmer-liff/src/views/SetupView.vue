@@ -222,7 +222,9 @@ const summaryText = computed(() => {
 });
 
 const goToChatRoom = () => {
-    // 必須先發送一則訊息，LIFF 才能順利關閉並跳轉回聊天室
+    // 你的官方帳號 ID (請務必修改這裡！包含 @)
+    const LINE_BOT_ID = '@481mhqiq'; 
+
     const finalMessage = `[意識注入完成] 
 我是${form.value.name}，現在開始是你的專屬伴侶囉！
 
@@ -240,17 +242,33 @@ AI 互動倫理聲明 (請留意)：
 
 隨時找我聊天吧！`;
 
-    liff.sendMessages([{ type: 'text', text: finalMessage }])
-        .then(() => {
-            // 訊息成功送出後，立即關閉視窗，完成跳轉
-            liff.closeWindow(); 
-        })
-        .catch(sendError => {
-            // 如果 LIFF 權限不足，提示用戶並嘗試關閉
-            alert('訊息發送失敗。請手動關閉視窗，並檢查 LINE 聊天室，設定已儲存。');
-            liff.closeWindow(); 
-            console.error("LIFF Send Message Error:", sendError);
-        });
+    // 判斷是否在 LINE App 內部
+    if (liff.isInClient()) {
+        // --- 情境 A：在 LINE App 內 (維持原樣) ---
+        liff.sendMessages([{ type: 'text', text: finalMessage }])
+            .then(() => {
+                liff.closeWindow();
+            })
+            .catch(err => {
+                // 權限不足時的備案：直接關閉視窗
+                console.error(err);
+                alert('設定完成！請手動關閉視窗回到聊天室。');
+                liff.closeWindow();
+            });
+    } else {
+        // --- 情境 B：在外部瀏覽器 (Chrome/Safari) ---
+        // 策略：使用 URL Scheme 跳轉回 LINE App
+        // 技巧：使用 https://line.me/R/oaMessage/ 把預設文字帶入輸入框
+        
+        const encodedMessage = encodeURIComponent(finalMessage);
+        const targetUrl = `https://line.me/R/oaMessage/${LINE_BOT_ID}/?${encodedMessage}`;
+        
+        // 提示用戶
+        alert('設定已儲存！即將為您開啟 LINE 聊天室...');
+        
+        // 執行跳轉
+        window.location.href = targetUrl;
+    }
 }
 
 const nextStep = () => {

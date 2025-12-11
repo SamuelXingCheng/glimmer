@@ -55,6 +55,65 @@ foreach ($events['events'] as $event) {
             $stmt->execute([$userId, $encryptedMsg]); // 🚨 儲存加密後的訊息
             $hasNewTask = true;
         }
+    }elseif ($event['type'] == 'follow') {
+        $replyToken = $event['replyToken'];
+        
+        // 這裡填入你的 LIFF 完整網址 (請確認 ID 正確)
+        // 根據你上傳的檔案，你的 LIFF ID 應該是 2008670429-XlQ1dMMK
+        $liffUrl = "https://liff.line.me/2008670429-XlQ1dMMK"; 
+
+        // 定義 Flex Message
+        $flexMessage = [
+            'type' => 'flex',
+            'altText' => '歡迎加入！請建立您的專屬角色',
+            'contents' => [
+                'type' => 'bubble',
+                // 🚨 移除 hero 區塊以消除大空白
+                'body' => [
+                    'type' => 'box',
+                    'layout' => 'vertical',
+                    'spacing' => 'sm', // 調整為 sm (Small) 讓間距更緊湊
+                    'paddingAll' => '20px', // 確保邊距適中
+                    'contents' => [
+                        [
+                            'type' => 'text',
+                            'text' => '歡迎來到 微光角落',
+                            'weight' => 'bold',
+                            'size' => 'xl',
+                            'color' => '#2C5F48' // 使用主色調
+                        ],
+                        [
+                            'type' => 'text',
+                            'text' => '為了提供最完美的陪伴體驗，請先花 30 秒設定您心目中的理想 AI 伴侶。',
+                            'wrap' => true,
+                            'size' => 'sm', // 稍微縮小字體
+                            'color' => '#666666',
+                            'margin' => 'md'
+                        ]
+                    ]
+                ],
+                'footer' => [
+                    'type' => 'box',
+                    'layout' => 'vertical',
+                    'spacing' => 'sm',
+                    'contents' => [
+                        [
+                            'type' => 'button',
+                            'action' => [
+                                'type' => 'uri',
+                                'label' => '開始建立角色',
+                                'uri' => $liffUrl // 跳轉到 LIFF
+                            ],
+                            'style' => 'primary',
+                            'color' => '#2C5F48'
+                        ]
+                    ]
+                ]
+            ]
+        ];
+
+        // 直接呼叫 LINE API 回覆 (不進資料庫)
+        replyMessage($replyToken, $flexMessage);
     }
 }
 
@@ -91,5 +150,26 @@ function triggerRunner() {
     } else {
         error_log("Runner 觸發失敗: $errstr ($errno)");
     }
+}
+// 🚨 新增：專門用來回覆歡迎訊息的函式
+function replyMessage($replyToken, $messageObj) {
+    $url = "https://api.line.me/v2/bot/message/reply";
+    
+    $data = [
+        'replyToken' => $replyToken,
+        'messages' => [$messageObj]
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Content-Type: application/json",
+        "Authorization: Bearer " . LINE_CHANNEL_ACCESS_TOKEN // 確保 config.php 有定義此常數
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $result = curl_exec($ch);
+    curl_close($ch);
+    return $result;
 }
 ?>
