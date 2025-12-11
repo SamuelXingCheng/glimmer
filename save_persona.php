@@ -28,6 +28,7 @@ $c = $data['config'];
 // --- 變數準備 ---
 $imageUrl = "https://example.com/default_avatar.png"; 
 $age = $c['age'] ?? 20; 
+$gender = $c['gender'] ?? '客製化';
 
 // 更新 config JSON
 $c['image_url'] = $imageUrl;
@@ -39,7 +40,7 @@ $configJson = json_encode($c, JSON_UNESCAPED_UNICODE);
 // =============================================
 $prompt = "現在開始進行角色扮演 (Roleplay)。\n";
 $prompt .= "你的名字是：{$c['name']}，年齡是：{$c['age']} 歲。\n";
-$prompt .= "你的角色設定：{$c['gender']}。\n";
+$prompt .= "你的角色設定：{$gender}。\n";
 $prompt .= "你的外貌特徵：{$c['appearance']}。\n";
 $prompt .= "你的性格與語氣：{$c['personality']} (這是最重要的核心設定)。\n";
 $prompt .= "你與使用者的關係是：{$c['relationship']}。\n";

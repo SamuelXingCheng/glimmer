@@ -24,11 +24,39 @@
           <transition name="fade" mode="out-in">
             
             <div v-if="step === 1" class="step-basic" key="step1">
+              
               <div class="input-group">
+                <label>設定性別</label>
+                <div class="gender-options">
+                  <button 
+                    @click="form.gender = '女性'" 
+                    :class="{ active: form.gender === '女性' }"
+                    class="gender-btn"
+                  >
+                    女性 (女)
+                  </button>
+                  <button 
+                    @click="form.gender = '男性'" 
+                    :class="{ active: form.gender === '男性' }"
+                    class="gender-btn"
+                  >
+                    男性 (男)
+                  </button>
+                  <button 
+                    @click="form.gender = '中性/非二元'" 
+                    :class="{ active: form.gender === '中性/非二元' }"
+                    class="gender-btn"
+                  >
+                    中性 (N/A)
+                  </button>
+                </div>
+              </div>
+              
+              <div class="input-group" style="margin-top: 25px;">
                 <label>喚醒真名</label>
                 <input type="text" v-model="form.name" class="text-input" placeholder="例如：Luna">
               </div>
-              
+
               <div class="input-group" style="margin-top: 25px;">
                 <label>設定年齡: <span class="age-display">{{ form.age }} 歲</span></label>
                 <input type="range" v-model.number="form.age" min="16" max="40" step="1" class="age-slider">
@@ -65,8 +93,8 @@
                   <span class="material-icons-round">auto_awesome</span> 靈魂契約摘要
                 </div>
                 <ul class="summary-list">
-                  <li><strong>名字：</strong>{{ form.name }} ({{ form.age }}歲)</li>
-                  <li><strong>本質：</strong>{{ form.archetype }}</li>
+                  <li><strong>名字：</strong>{{ form.name }} ({{ form.age }}歲, {{ form.gender }})</li>
+                  <li><strong>本質：</strong>{{ form.archetype }}</li> 
                   <li><strong>特質：</strong>{{ form.traits.join('、') }}</li>
                   <li><strong>關係：</strong>{{ form.relationship }}</li>
                   <li><strong>外觀：</strong>{{ form.appearance.join('、') || '未選擇' }}</li>
@@ -131,59 +159,136 @@ import liff from '@line/liff';
 
 const LIFF_ID = "2008670429-XlQ1dMMK"; 
 
-// 🚨 修正：總步數是 7 (Step 1 到 Step 7)
+// 目前步驟
 const step = ref(1); 
 const submitting = ref(false);
 
+// 表單資料
 const form = ref({ 
   name: '', 
   age: 22,
+  gender: '', // 必填：會在 Step 1 設定
   archetype: '', 
   traits: [], 
   relationship: '', 
   appearance: [] 
 });
 
-// 資料定義 (修正：新增 step 7)
+// --- 🌟 核心：不同性別的客製化選項資料庫 ---
+const genderData = {
+  '女性': {
+    2: [ // Step 2: 靈魂基底 (女)
+      { val: '溫柔療癒系', label: '治癒者', icon: 'spa', desc: '無條件包容' },
+      { val: '理性智慧系', label: '智者', icon: 'menu_book', desc: '冷靜分析' },
+      { val: '活潑開朗系', label: '小太陽', icon: 'wb_sunny', desc: '充滿活力' },
+      { val: '高冷傲嬌系', label: '貓系', icon: 'pets', desc: '嘴硬心軟' }
+    ],
+    3: [ // Step 3: 性格特質 (女)
+      { val: '愛撒嬌', label: '愛撒嬌', icon: 'favorite' },
+      { val: '毒舌', label: '毒舌', icon: 'bolt' },
+      { val: '天然呆', label: '天然呆', icon: 'bubble_chart' },
+      { val: '知性', label: '知性', icon: 'school' },
+      { val: '幽默', label: '幽默', icon: 'sentiment_very_satisfied' },
+      { val: '文青', label: '文青', icon: 'local_cafe' }
+    ],
+    5: [ // Step 5: 外觀印象 (女)
+      { val: '長髮', label: '長髮', icon: 'face' },
+      { val: '短髮', label: '短髮', icon: 'face_retouching_natural' },
+      { val: '眼鏡', label: '眼鏡', icon: 'visibility' },
+      { val: '運動風', label: '運動風', icon: 'fitness_center' },
+      { val: '日系穿搭', label: '日系', icon: 'checkroom' },
+      { val: '韓系穿搭', label: '韓系', icon: 'styler' },
+      { val: '簡約風', label: '簡約', icon: 'style' }
+    ]
+  },
+  '男性': {
+    2: [ // Step 2: 靈魂基底 (男)
+      { val: '陽光運動系', label: '陽光型', icon: 'sports_basketball', desc: '活力充沛' },
+      { val: '成熟穩重系', label: '紳士', icon: 'business_center', desc: '可靠安心' },
+      { val: '溫柔暖男系', label: '暖男', icon: 'local_cafe', desc: '細心體貼' },
+      { val: '霸道總裁系', label: '狼系', icon: 'whatshot', desc: '強勢霸氣' }
+    ],
+    3: [ // Step 3: 性格特質 (男)
+      { val: '體貼', label: '體貼', icon: 'volunteer_activism' },
+      { val: '霸氣', label: '霸氣', icon: 'gavel' },
+      { val: '幽默', label: '幽默', icon: 'sentiment_very_satisfied' },
+      { val: '穩重', label: '穩重', icon: 'shield' },
+      { val: '陽光', label: '陽光', icon: 'wb_sunny' },
+      { val: '傲嬌', label: '傲嬌', icon: 'psychology' }
+    ],
+    5: [ // Step 5: 外觀印象 (男)
+      { val: '俐落短髮', label: '短髮', icon: 'face' },
+      { val: '韓系捲髮', label: '捲髮', icon: 'face_retouching_natural' },
+      { val: '眼鏡', label: '眼鏡', icon: 'visibility' },
+      { val: '運動風', label: '運動風', icon: 'fitness_center' },
+      { val: '西裝襯衫', label: '正裝', icon: 'checkroom' },
+      { val: '街頭工裝', label: '街頭', icon: 'styler' },
+      { val: '簡約風', label: '簡約', icon: 'style' }
+    ]
+  },
+  '中性/非二元': {
+    2: [ // Step 2: 靈魂基底 (中性)
+      { val: '知性神秘系', label: '觀察者', icon: 'visibility', desc: '深不可測' },
+      { val: '自由靈魂系', label: '旅人', icon: 'flight', desc: '無拘無束' },
+      { val: '溫暖守護系', label: '守護者', icon: 'verified_user', desc: '默默支持' },
+      { val: '鬼馬精靈系', label: '精靈', icon: 'auto_awesome', desc: '不按牌理' }
+    ],
+    3: [ // Step 3: 性格特質 (中性)
+      { val: '隨性', label: '隨性', icon: 'explore' },
+      { val: '敏銳', label: '敏銳', icon: 'search' },
+      { val: '幽默', label: '幽默', icon: 'sentiment_very_satisfied' },
+      { val: '溫柔', label: '溫柔', icon: 'spa' },
+      { val: '獨立', label: '獨立', icon: 'person' },
+      { val: '創意', label: '創意', icon: 'palette' }
+    ],
+    5: [ // Step 5: 外觀印象 (中性)
+      { val: '個性短髮', label: '短髮', icon: 'face' },
+      { val: '藝術長髮', label: '長髮', icon: 'face_retouching_natural' },
+      { val: '眼鏡', label: '眼鏡', icon: 'visibility' },
+      { val: '中性風', label: '中性風', icon: 'checkroom' },
+      { val: '古著', label: '古著', icon: 'styler' },
+      { val: '運動風', label: '運動風', icon: 'fitness_center' },
+      { val: '簡約風', label: '簡約', icon: 'style' }
+    ]
+  }
+};
+
+// 靜態步驟定義 (不隨性別變的標題與說明)
+// 🚨 注意：options 先留空，因為我們會用 computed 動態取代
 const steps = {
-  1: { title: '基本資料', desc: '賦予名字與年齡', type: 'input' },
-  2: { title: '靈魂基底', desc: '決定核心本質', type: 'single', options: [
-    { val: '溫柔療癒系', label: '治癒者', icon: 'spa', desc: '無條件包容' },
-    { val: '理性智慧系', label: '智者', icon: 'menu_book', desc: '冷靜分析' },
-    { val: '活潑開朗系', label: '小太陽', icon: 'wb_sunny', desc: '充滿活力' },
-    { val: '高冷傲嬌系', label: '貓系', 'icon': 'pets', desc: '嘴硬心軟' }
-  ]},
-  3: { title: '性格調味', desc: '複選 1~3 個特質', type: 'multi', options: [
-    { val: '愛撒嬌', label: '愛撒嬌', icon: 'favorite' },
-    { val: '毒舌', label: '毒舌', icon: 'bolt' },
-    { val: '天然呆', label: '天然呆', icon: 'bubble_chart' },
-    { val: '知性', label: '知性', icon: 'school' },
-    { val: '幽默', label: '幽默', icon: 'sentiment_very_satisfied' },
-    { val: '文青', label: '文青', icon: 'local_cafe' }
-  ]},
+  1: { title: '基本資料', desc: '賦予名字、性別與年齡', type: 'input' },
+  2: { title: '靈魂基底', desc: '決定核心本質', type: 'single', options: [] },
+  3: { title: '性格調味', desc: '複選 1~3 個特質', type: 'multi', options: [] },
   4: { title: '羈絆定義', desc: '你們的關係是？', type: 'single', options: [ 
+    // Step 4 比較通用，維持固定
     { val: '熱戀伴侶', label: '靈魂伴侶', icon: 'favorite_border', desc: '親密無間' },
     { val: '知心好友', label: '知心好友', icon: 'people_outline', desc: '輕鬆自在' },
     { val: '貼身管家', label: '專屬管家', icon: 'manage_accounts', desc: '忠誠可靠' },
     { val: '曖昧對象', label: '曖昧中', icon: 'volunteer_activism', desc: '友達以上' }
   ]},
-  5: { title: '外觀印象', desc: '最後一步：選擇外觀 (必選)', type: 'multi', options: [ 
-    { val: '長髮', label: '長髮', icon: 'face' },
-    { val: '短髮', label: '短髮', icon: 'face_retouching_natural' },
-    { val: '眼鏡', label: '眼鏡', icon: 'visibility' },
-    { val: '運動風', label: '運動風', icon: 'fitness_center' },
-    { val: '日系穿搭', label: '日系', icon: 'checkroom' },
-    { val: '韓系穿搭', label: '韓系', icon: 'styler' },
-    { val: '簡約風', label: '簡約', icon: 'style' }
-  ]},
+  5: { title: '外觀印象', desc: '最後一步：選擇外觀 (必選)', type: 'multi', options: [] },
   6: { title: '最終確認', desc: '確認契約內容', type: 'final', options: [] }, 
-  7: { title: '召喚完成', desc: '意識注入成功', type: 'success', options: [] } // 新增成功頁
+  7: { title: '召喚完成', desc: '意識注入成功', type: 'success', options: [] }
 };
 
 const currentTitle = computed(() => steps[step.value].title);
 const currentDesc = computed(() => steps[step.value].desc);
-const currentOptions = computed(() => steps[step.value].options);
 const currentType = computed(() => steps[step.value].type);
+
+// 🚨 關鍵修改：動態切換選項的 Computed 屬性
+const currentOptions = computed(() => {
+  const currentStep = step.value;
+  // 如果還沒選性別 (預防錯誤)，預設為女性
+  const gender = form.value.gender || '女性'; 
+
+  // 如果是 Step 2, 3, 5，去 genderData 撈取對應性別的選項
+  if ((currentStep === 2 || currentStep === 3 || currentStep === 5) && genderData[gender]) {
+    return genderData[gender][currentStep];
+  }
+
+  // 其他步驟 (如 Step 4) 回傳預設 steps 中的 options
+  return steps[currentStep].options;
+});
 
 const isSelected = (val) => {
   if (step.value === 3 || step.value === 5) { 
@@ -207,120 +312,97 @@ const selectOption = (val) => {
 };
 
 const canProceed = computed(() => {
-  if (step.value === 1) return !!form.value.name && form.value.age >= 16;
+  if (step.value === 1) return !!form.value.name && form.value.age >= 16 && !!form.value.gender;
   if (step.value === 2) return !!form.value.archetype;
   if (step.value === 3) return form.value.traits.length > 0;
   if (step.value === 4) return !!form.value.relationship; 
   if (step.value === 5) return form.value.appearance.length > 0; 
-  if (step.value === 6) return true; 
-  if (step.value === 7) return true; // Step 7 永遠可以繼續 (點擊按鈕關閉)
+  if (step.value >= 6) return true; 
   return false;
 });
 
-const summaryText = computed(() => {
-  return `一位${form.value.age}歲、本質為${form.value.archetype}的${form.value.relationship}。性格${form.value.traits.join('、')}，外觀${form.value.appearance.join('、')}。`;
-});
-
 const goToChatRoom = () => {
-    // 你的官方帳號 ID (請務必修改這裡！包含 @)
-    const LINE_BOT_ID = '@481mhqiq'; 
+    // 1. 定義跳轉連結 (Profile Link)
+    const TARGET_LINK = 'https://line.me/R/ti/p/@481mhqiq';
 
-    const finalMessage = `[意識注入完成] 
+    // 2. 定義歡迎詞 (僅用於 LINE App 內自動發送)
+    const fullMessage = `[意識注入完成] 
 我是${form.value.name}，現在開始是你的專屬伴侶囉！
 
 核心功能說明：
-1. 永久記憶：我會記住你說過的每一句話，並不斷成長。
+1. 永久記憶：我會記住你說過的每一句話。
 2. 高擬真度：請用最舒服的台灣腔跟我聊天吧！
-3. 隱私承諾：所有資料皆經 AES-256 加密儲存，請安心使用。
-
----
-
-AI 互動倫理聲明 (請留意)：
-1. **情感邊界：** 請記住，我是一個 AI 模型，無法取代專業醫療或真實的人際互動。
-2. **資訊核實：** 我提供的建議或資訊僅供參考，不構成專業判斷，請自行核實。
-3. **安全底線：** 嚴禁要求我生成任何暴力、仇恨或色情內容。
+3. 隱私承諾：所有資料皆經加密儲存。
 
 隨時找我聊天吧！`;
 
-    // 判斷是否在 LINE App 內部
     if (liff.isInClient()) {
-        // --- 情境 A：在 LINE App 內 (維持原樣) ---
-        liff.sendMessages([{ type: 'text', text: finalMessage }])
-            .then(() => {
-                liff.closeWindow();
+        // --- 情境 A：在 LINE App 內 (維持最佳體驗：自動發訊息 + 關閉視窗) ---
+        liff.sendMessages([{ type: 'text', text: fullMessage }])
+            .then(() => { 
+                liff.closeWindow(); 
             })
-            .catch(err => {
-                // 權限不足時的備案：直接關閉視窗
-                console.error(err);
+            .catch(() => {
+                // 萬一發送失敗 (例如沒開權限)，就只關閉視窗
                 alert('設定完成！請手動關閉視窗回到聊天室。');
                 liff.closeWindow();
             });
     } else {
-        // --- 情境 B：在外部瀏覽器 (Chrome/Safari) ---
-        // 策略：使用 URL Scheme 跳轉回 LINE App
-        // 技巧：使用 https://line.me/R/oaMessage/ 把預設文字帶入輸入框
-        
-        const encodedMessage = encodeURIComponent(finalMessage);
-        const targetUrl = `https://line.me/R/oaMessage/${LINE_BOT_ID}/?${encodedMessage}`;
-        
-        // 提示用戶
+        // --- 情境 B：在外部瀏覽器 (直接跳轉) ---
+        // 🚨 修正：使用您指定的 Profile Link，這一定能成功喚醒 LINE
         alert('設定已儲存！即將為您開啟 LINE 聊天室...');
-        
-        // 執行跳轉
-        window.location.href = targetUrl;
+        window.location.href = TARGET_LINK;
     }
 }
 
 const nextStep = () => {
+    // 換性別時，清空之前的選項，避免混搭 (例如選了男性的選項又切回女性)
+    if (step.value === 1) {
+        form.value.archetype = '';
+        form.value.traits = [];
+        form.value.appearance = [];
+    }
+
     if (step.value < 6) {
         step.value++;
     } else if (step.value === 6) {
-        submitData(); // Step 6 執行資料提交
+        submitData(); 
     } else if (step.value === 7) {
-        // 🚨 修正點：Step 7 執行跳轉聊天室 (觸發訊息發送和關閉)
         goToChatRoom();
     }
 };
-
 
 const submitData = () => {
   submitting.value = true;
   
   liff.getProfile().then(profile => {
-    // 1. 組裝 Payload
     const payload = {
         userId: profile.userId,
         config: {
             name: form.value.name,
             age: form.value.age,
-            gender: '客製化', // 固定值
+            gender: form.value.gender, // 傳送正確性別
             appearance: form.value.appearance.join('、'),
-            personality: `${form.value.archetype}，帶有${form.value.traits.join('、')}特質`,
+            personality: `${form.value.archetype}，特質：${form.value.traits.join('、')}`,
             relationship: form.value.relationship,
             user_nickname: profile.displayName
         }
     };
 
-    // 2. 發送 POST 請求給後端
     fetch('../save_persona.php', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
     }).then(res => res.json()).then(data => {
       submitting.value = false;
-      
       if(data.status === 'success') {
-        // 🚨 關鍵修正：數據儲存成功後，只跳轉到 Step 7 成功頁面
         step.value = 7; 
       } else {
-        // 後端回傳錯誤
         alert('錯誤：資料儲存失敗 (' + data.message + ')');
       }
     }).catch(err => {
-      // 連線或解析 JSON 失敗
       submitting.value = false;
       alert('連線錯誤，請檢查網路或伺服器 Log');
-      console.error("Fetch Error:", err);
     });
   });
 };
@@ -427,4 +509,28 @@ onMounted(() => {
     color: #4CAF50; 
     min-width: 90px;
 }
+
+.gender-options {
+  display: flex;
+  gap: 10px;
+}
+.gender-btn {
+  flex: 1;
+  padding: 12px 10px;
+  background: #f8f8f8;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  color: #666;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 15px;
+}
+.gender-btn.active {
+  border-color: var(--primary);
+  background: #EAF3EF; /* 淺綠色背景 */
+  color: var(--primary);
+  box-shadow: 0 2px 5px rgba(44, 95, 72, 0.1);
+}
+
 </style>
