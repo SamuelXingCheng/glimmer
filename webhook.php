@@ -60,7 +60,7 @@ foreach ($events['events'] as $event) {
         
         // 這裡填入你的 LIFF 完整網址 (請確認 ID 正確)
         // 根據你上傳的檔案，你的 LIFF ID 應該是 2008670429-XlQ1dMMK
-        $liffUrl = "https://finbot.tw/glimmer/liff/index.html#/setup";
+        $liffUrl = "https://finbot.tw/glimmer/liff/index.html";
 
         // 定義 Flex Message
         $flexMessage = [
