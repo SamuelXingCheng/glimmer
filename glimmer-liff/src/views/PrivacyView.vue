@@ -12,7 +12,8 @@
         <span class="material-icons-round item-icon">vpn_key</span>
         <div class="item-content">
           <h3>端對端加密儲存</h3>
-          <p>您的所有對話紀錄與人設參數，皆透過 AES-256 高強度加密技術儲存於資料庫，即便系統管理員也無法直接查看明文。</p>
+          <p>您的Line聊天記錄與人設參數，皆透過 AES-256 高強度加密技術儲存於資料庫，即便系統管理員也無法直接查看明文。</p>
+          <p>。</p>
         </div>
       </div>
 
@@ -20,7 +21,7 @@
         <span class="material-icons-round item-icon">fingerprint</span>
         <div class="item-content">
           <h3>資料去辨識化</h3>
-          <p>系統僅使用 LINE User ID 進行去辨識化索引，不會索取您的真實姓名、電話或 LINE ID，確保您的數位身分安全。</p>
+          <p>系統使用去辨識化索引，不會獲得您的真實姓名、電話或 LINE ID，確保您的數位身分安全。</p>
         </div>
       </div>
 
@@ -28,7 +29,7 @@
         <span class="material-icons-round item-icon">psychology</span>
         <div class="item-content">
           <h3>AI 互動聲明</h3>
-          <p>本服務使用 OpenAI 模型生成回應。您的對話僅用於與 AI 互動，不會用於廣告投放或第三方銷售。</p>
+          <p>本服務使用 OpenAI/Gemini 模型生成回應。您的對話僅用於與 AI 互動，不會用於廣告投放或第三方銷售。</p>
         </div>
       </div>
     </div>
@@ -99,17 +100,27 @@ h2 {
 .policy-card {
   background: white;
   border-radius: 16px;
-  padding: 25px;
+  padding: 15px 25px; 
   box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-  margin-bottom: 30px;
+  /* 🚨 修正點 1: 移除 policy-card 底部的過大間距 */
+  margin-bottom: 15px; 
 }
 
-.policy-item {
+/* 🚨 修正點 2: 修正 CSS 選擇器，並讓 item 之間有緊湊的分隔線 */
+.policy-item { /* 修正：移除前面的 policy-item { */
   display: flex;
-  margin-bottom: 25px;
+  padding: 15px 0; 
+  margin-bottom: 0; 
+  border-bottom: 1px dashed #eee;
 }
+
+.policy-item:first-child {
+  padding-top: 0; 
+}
+
 .policy-item:last-child {
-  margin-bottom: 0;
+  padding-bottom: 0; 
+  border-bottom: none; 
 }
 
 .item-icon {
@@ -134,7 +145,9 @@ h2 {
 }
 
 .footer {
-  margin-top: auto;
+  /* 🚨 修正點 3: 移除 margin-top: auto; 讓 footer 不會被推到頁面最底部 */
+  margin-top: 20px; 
+  text-align: center;
 }
 
 /* 自訂 Checkbox 樣式 */
@@ -174,5 +187,25 @@ h2 {
   font-size: 14px;
   top: -1px;
   left: 3px;
+}
+
+/* 按鈕樣式 (維持不變，假設 .btn 是按鈕) */
+.btn {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.btn:disabled {
+    background-color: #E0E0E0;
+    color: #AAA;
+    cursor: not-allowed;
 }
 </style>

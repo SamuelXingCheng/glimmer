@@ -42,7 +42,7 @@ function loadEnv($path) {
 loadEnv(__DIR__ . '/.env');
 
 // 2. 檢查必要設定 (防呆)
-$required = ['DB_HOST', 'DB_USER', 'DB_PASS', 'LINE_CHANNEL_ACCESS_TOKEN', 'GEMINI_API_KEY'];
+$required = ['DB_HOST', 'DB_USER', 'DB_PASS', 'LINE_CHANNEL_ACCESS_TOKEN', 'GEMINI_API_KEY', 'ENCRYPTION_KEY'];
 foreach ($required as $key) {
     if (!defined($key)) {
         error_log("Config Error: Missing $key in .env");

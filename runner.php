@@ -7,7 +7,10 @@ set_time_limit(120);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Database.php';
+require_once __DIR__ . '/src/Encryption.php'; // 🚨 確保 Encryption 類別被載入
 
+// 🚨 1. 動態初始化 AI 服務 (服務切換邏輯)
+$aiService = null; 
 if (ACTIVE_AI_SERVICE === 'gemini') {
     require_once __DIR__ . '/src/GeminiService.php';
     $aiService = new GeminiService();
@@ -15,7 +18,7 @@ if (ACTIVE_AI_SERVICE === 'gemini') {
 } elseif (ACTIVE_AI_SERVICE === 'openai') {
     require_once __DIR__ . '/src/OpenAIService.php';
     $aiService = new OpenAIService();
-    error_log("OpenAIService");
+    error_log("使用OpenAIService！"); // 修正 Log 輸出
 } else {
     error_log("FATAL: 未知的 AI 服務設定！");
     exit;
@@ -25,7 +28,6 @@ if (ACTIVE_AI_SERVICE === 'gemini') {
 $db = Database::getInstance()->getConnection();
 
 // 1. 撈取待處理的工作 (一次只處理一筆)
-// 我們在這裡使用 status = 'pending' 來判斷
 $stmt = $db->prepare("SELECT * FROM chat_logs WHERE status = 'pending' AND role = 'user' ORDER BY created_at ASC LIMIT 1");
 $stmt->execute();
 $task = $stmt->fetch();
@@ -38,14 +40,23 @@ if (!$task) {
 
 $id = $task['id'];
 $userId = $task['line_user_id'];
-$userMsg = $task['message'];
+$userMsgEncrypted = $task['message']; // 🚨 訊息是加密的
 
-// 2. 標記為處理中 (防止其他 runner 重複處理)
+// 🚨 2. 解密當前使用者訊息
+try {
+    $userMsg = Encryption::decrypt($userMsgEncrypted);
+} catch (Exception $e) {
+    error_log("Runner 解密使用者訊息失敗 (ID: $id): " . $e->getMessage());
+    $db->prepare("UPDATE chat_logs SET status = 'error' WHERE id = ?")->execute([$id]);
+    exit;
+}
+
+
+// 3. 標記為處理中 (防止其他 runner 重複處理)
 $db->prepare("UPDATE chat_logs SET status = 'processing' WHERE id = ?")->execute([$id]);
 
 try {
-    // 3. 準備對話歷史與人設
-    // 需要重新實現 getChatHistory，確保只讀取 completed 的歷史紀錄
+    // 4. 準備對話歷史與人設
     $history = getChatHistoryForRunner($db, $userId, 10);
     $userData = getUserDataForRunner($db, $userId);
     $personaPrompt = $userData ? $userData['persona_prompt'] : null;
@@ -60,18 +71,19 @@ try {
         $finalSystemPrompt .= "\n";
     }
 
-    // 4. 呼叫 OpenAI (這裡會花 3~5 秒，但不會卡住 Webhook)
-    $aiReply = $aiService->generateReply($userMsg, $history, $finalSystemPrompt);
+    // 5. 呼叫 AI 服務
+    $aiReply = $aiService->generateReply($userMsg, $history, $finalSystemPrompt); // 🚨 傳入已解密的使用者訊息 $userMsg
 
     if ($aiReply) {
-        // 5. 使用 Push API 主動推播回覆
+        // 6. 使用 Push API 主動推播回覆
         pushMessage($userId, $aiReply);
         
-        // 6. 存入 AI 回覆
-        $db->prepare("INSERT INTO chat_logs (line_user_id, role, message, status) VALUES (?, 'model', ?, 'completed')")->execute([$userId, $aiReply]);
+        // 7. 🚨 存入 AI 回覆 (AI 回覆需加密)
+        $aiReplyEncrypted = Encryption::encrypt($aiReply); 
+        $db->prepare("INSERT INTO chat_logs (line_user_id, role, message, status) VALUES (?, 'model', ?, 'completed')")->execute([$userId, $aiReplyEncrypted]);
     }
 
-    // 7. 標記完成
+    // 8. 標記完成
     $db->prepare("UPDATE chat_logs SET status = 'completed' WHERE id = ?")->execute([$id]);
 
 } catch (Exception $e) {
@@ -86,13 +98,12 @@ echo "Task $id completed.";
 // --- 輔助函式 (專為 Runner 設計) ---
 
 function pushMessage($userId, $text) {
-    // PUSH API 實現 (請從之前的 webhook.php 複製並修改為 Push 邏輯)
+    // ... (pushMessage 函式保持不變) ...
     $url = "https://api.line.me/v2/bot/message/push";
     $data = [
         'to' => $userId,
         'messages' => [['type' => 'text', 'text' => $text]]
     ];
-    // 這裡你需要使用 cURL 來發送 Push API 請求
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
@@ -107,15 +118,26 @@ function pushMessage($userId, $text) {
 
 function getChatHistoryForRunner($pdo, $userId, $limit = 10) {
     // 確保只讀取已經完成 (completed) 的對話
-    $sql = "SELECT role, message FROM chat_logs 
-            WHERE line_user_id = ? AND status = 'completed' 
+    $sql = "SELECT role, message FROM chat_logs  
+            WHERE line_user_id = ? AND status = 'completed'
             ORDER BY created_at DESC 
             LIMIT ? OFFSET 1"; // 忽略剛剛存的 pending 訊息
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(1, $userId);
     $stmt->bindValue(2, (int)$limit, PDO::PARAM_INT);
     $stmt->execute();
-    return array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
+    $results = array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
+
+    // 🚨 解密歷史對話內容
+    foreach ($results as &$row) {
+        try {
+            $row['message'] = Encryption::decrypt($row['message']);
+        } catch (Exception $e) {
+             error_log("Chat history 解密失敗: " . $e->getMessage());
+             $row['message'] = ''; // 解密失敗則清空
+        }
+    }
+    return $results;
 }
 
 function getUserDataForRunner($pdo, $userId) {
@@ -126,10 +148,27 @@ function getUserDataForRunner($pdo, $userId) {
     
     if (!$data) return null;
 
-    // 🚨 新增：撈取最新的長時記憶摘要
+    // 🚨 解密人設 Prompt
+    try {
+        $data['persona_prompt'] = Encryption::decrypt($data['persona_prompt']);
+    } catch (Exception $e) {
+         error_log("Persona Prompt 解密失敗: " . $e->getMessage());
+         $data['persona_prompt'] = '';
+    }
+
+    // 🚨 新增：撈取最新的長時記憶摘要 (summary_text 也是加密的)
     $ltm_stmt = $pdo->prepare("SELECT summary_text FROM user_ltm_summaries WHERE line_user_id = ? ORDER BY created_at DESC LIMIT 1");
     $ltm_stmt->execute([$userId]);
-    $ltm_summary = $ltm_stmt->fetchColumn();
+    $ltm_summary_encrypted = $ltm_stmt->fetchColumn();
+
+    $ltm_summary = '';
+    if ($ltm_summary_encrypted) {
+        try {
+            $ltm_summary = Encryption::decrypt($ltm_summary_encrypted);
+        } catch (Exception $e) {
+             error_log("LTM 摘要解密失敗: " . $e->getMessage());
+        }
+    }
 
     $data['ltm_summary'] = $ltm_summary ?: ''; // 如果沒有摘要，則為空字串
 
