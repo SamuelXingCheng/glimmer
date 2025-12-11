@@ -7,10 +7,22 @@ set_time_limit(120);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/src/Database.php';
-require_once __DIR__ . '/src/OpenAIService.php';
+
+if (ACTIVE_AI_SERVICE === 'gemini') {
+    require_once __DIR__ . '/src/GeminiService.php';
+    $aiService = new GeminiService();
+    error_log("使用GeminiService！");
+} elseif (ACTIVE_AI_SERVICE === 'openai') {
+    require_once __DIR__ . '/src/OpenAIService.php';
+    $aiService = new OpenAIService();
+    error_log("OpenAIService");
+} else {
+    error_log("FATAL: 未知的 AI 服務設定！");
+    exit;
+}
+
 
 $db = Database::getInstance()->getConnection();
-$aiService = new OpenAIService();
 
 // 1. 撈取待處理的工作 (一次只處理一筆)
 // 我們在這裡使用 status = 'pending' 來判斷
@@ -49,7 +61,7 @@ try {
     }
 
     // 4. 呼叫 OpenAI (這裡會花 3~5 秒，但不會卡住 Webhook)
-    $aiReply = $aiService->generateReply($userMsg, $history, $personaPrompt);
+    $aiReply = $aiService->generateReply($userMsg, $history, $finalSystemPrompt);
 
     if ($aiReply) {
         // 5. 使用 Push API 主動推播回覆

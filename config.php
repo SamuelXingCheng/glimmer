@@ -1,5 +1,7 @@
 <?php
 // glimmer/config.php
+// 🚨 設定為 'gemini' 或 'openai'
+define('ACTIVE_AI_SERVICE', 'gemini'); 
 
 /**
  * 簡易的 .env 載入器

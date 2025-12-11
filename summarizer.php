@@ -9,6 +9,18 @@ require_once 'config.php';
 require_once 'src/Database.php';
 require_once 'src/OpenAIService.php';
 
+// 🚨 根據設定動態引入 AI 服務 🚨
+if (ACTIVE_AI_SERVICE === 'gemini') {
+    require_once 'src/GeminiService.php';
+    $aiService = new GeminiService();
+} elseif (ACTIVE_AI_SERVICE === 'openai') {
+    require_once 'src/OpenAIService.php';
+    $aiService = new OpenAIService();
+} else {
+    error_log("FATAL: 未知的 AI 服務設定！無法執行摘要！");
+    exit;
+}
+
 $db = Database::getInstance()->getConnection();
 $aiService = new OpenAIService();
 
